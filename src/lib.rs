@@ -517,17 +517,17 @@ pub fn compute_crc32(data: &[u8]) -> u32 {
 }
 
 /// Gets the resource data type from a FourCC code.
-pub fn get_data_type(fourcc: &[u8; 4]) -> Option<&'static str> {
+pub fn get_data_type(fourcc: &[u8; 4]) -> Option<ResourceDataType> {
     match fourcc {
-        b"NULL" => Some("Null"),
-        b"RAWD" => Some("Raw"),
-        b"TEXT" => Some("Text"),
-        b"IMGE" => Some("Image"),
-        b"WAVE" => Some("Wave"),
-        b"VRTX" => Some("Vertex"),
-        b"FNTG" => Some("FontGlyphs"),
-        b"LINK" => Some("Link"),
-        b"CDIR" => Some("Directory"),
+        b"NULL" => Some(ResourceDataType::Null),
+        b"RAWD" => Some(ResourceDataType::Raw),
+        b"TEXT" => Some(ResourceDataType::Text),
+        b"IMGE" => Some(ResourceDataType::Image),
+        b"WAVE" => Some(ResourceDataType::Wave),
+        b"VRTX" => Some(ResourceDataType::Vertex),
+        b"FNTG" => Some(ResourceDataType::FontGlyphs),
+        b"LINK" => Some(ResourceDataType::Link),
+        b"CDIR" => Some(ResourceDataType::Directory),
         _ => None,
     }
 }
@@ -685,30 +685,41 @@ impl ResourceChunk {
             let prop_count = u32::from_le_bytes(data[0..4].try_into().unwrap()) as usize;
             self.data.prop_count = prop_count as u32;
 
+            let props_bytes = 4 * prop_count;
+            let min_len = 4usize
+                .checked_add(props_bytes)
+                .ok_or_else(|| Error::new(ErrorKind::InvalidData, "Overflow in props length"))?;
+
+            if data.len() < min_len {
+                return Err(Error::new(
+                    ErrorKind::UnexpectedEof,
+                    format!(
+                        "Chunk data too short for props (have {}, need {})",
+                        data.len(),
+                        min_len
+                    ),
+                ));
+            }
+
             // Read props if present
             self.data.props.clear();
-            if prop_count > 0 {
-                let expected_props_bytes = 4 * prop_count;
-                if data.len() < 4 + expected_props_bytes {
-                    return Err(Error::new(
-                        ErrorKind::UnexpectedEof,
-                        "Chunk data too short for props",
-                    ));
-                }
-                for i in 0..prop_count {
-                    let start = 4 + 4 * i;
-                    let end = start + 4;
-                    let prop = u32::from_le_bytes(data[start..end].try_into().unwrap());
-                    self.data.props.push(prop);
-                }
+            for i in 0..prop_count {
+                let start = 4 + 4 * i;
+                let end = start + 4;
+                let prop = u32::from_le_bytes(data[start..end].try_into().unwrap());
+                self.data.props.push(prop);
             }
 
             // Move raw pointer past prop_count and props
-            let raw_start = 4 + 4 * prop_count;
+            let raw_start = min_len;
             if raw_start > data.len() {
                 return Err(Error::new(
                     ErrorKind::UnexpectedEof,
-                    "Chunk raw data out of range after props",
+                    format!(
+                        "Chunk raw data out of range after props (raw_start {}, data.len {})",
+                        raw_start,
+                        data.len()
+                    ),
                 ));
             }
             self.data.raw = data[raw_start..].to_vec();
