@@ -929,6 +929,7 @@ impl CentralDir {
             entries.push(DirEntry {
                 id,
                 offset,
+                reserved: 0, // reserved field is not used
                 filename,
             });
             pos += 16 + name_size;
