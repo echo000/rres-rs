@@ -32,7 +32,7 @@ This project aims for compatibility with the original C rres, supporting resourc
 ## Example
 
 ```rust
-use rres_rs::ResourceChunk;
+use rres_rs::CentralDir;
 let cdir = CentralDir::load(path).unwrap();
 ```
 
